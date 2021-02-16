@@ -145,11 +145,60 @@ class Suffix:
         """ Run module in modules in order """
         for m in modules:
             m.copyFrom(self)  # copy suffix into module
-            self.runBefore()
+            m.runBefore()
             m.checkRun()      # MAIN
-            self.runAfter()
+            m.runAfter()
             if m.stop:        # stop
                 self.log("STOP")
                 break
             self.copyFrom(m)  # copy syffix out from module
             self.suffix += m.suffix_add  # add the suffix
+
+
+class SetSample(Suffix):
+    """ A simple Suffix module to assigne samples """
+    suffix_add = ""
+    cannot_skip = True
+    parallel = None
+
+    def __init__(self, samples):
+        super().__init__()
+        self.tmp_samples = samples
+
+    def run(self, thr):
+        self.samples = self.tmp_samples
+
+
+class Rename(Suffix):
+    """ Rename to another Suffix """
+    def __init__(self, parallel=True, new_stage=None, new_suffix=None, **argv):
+        super().__init__(**argv)
+        self.parallel = parallel
+        self.new_module = Suffix(self.base_folder, stage=new_stage, suffix=new_suffix)
+
+    def runBefore(self):
+        if self.new_module.stage  is None:
+            self.new_module.stage  = self.stage
+        if self.new_module.suffix is None:
+            self.new_module.suffix = self.suffix
+
+    def runAfter(self):
+        self.suffix = self.new_module.suffix
+        self.stage  = self.new_module.stage
+
+    def checkSkip(self, name=""):
+        return self.new_module.checkSkip(name)
+
+    def run(self, thr):
+        old_path = self.getFullPathIn()
+        for path in glob.glob(old_path + ".*"):
+            new_path = self.new_module.getFullPathOut() + path[len(old_path):]
+            self.log(f"LINK {path} to {new_path}")
+            os.symlink("../" * (self.base_folder.count("/") + 1) + path, new_path)
+
+    def runSample(self, name, thr):
+        old_path = self.getFullPathIn(name)
+        for path in glob.glob(old_path + ".*"):
+            new_path = self.new_module.getFullPathOut(name) + path[len(old_path):]
+            self.log(f"LINK {path} to {new_path}")
+            os.symlink("../" * (self.base_folder.count("/") + 1) + path, new_path)
